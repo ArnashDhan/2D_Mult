@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Unity.Services.Lobbies;
 using Unity.Services.Lobbies.Models;
+using Unity.Services.Core;
 
 public class LobbiesList : MonoBehaviour
 {
@@ -13,11 +14,13 @@ public class LobbiesList : MonoBehaviour
     [SerializeField] private LobbyItem lobbyItemPrefab;
     private void OnEnable()
     {
+       
         RefreshList();
 
     }
     public async void RefreshList()
     {
+        await UnityServices.InitializeAsync();
         if (isRefreshing) { return; }
 
         isRefreshing = true;

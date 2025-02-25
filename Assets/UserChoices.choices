@@ -26,11 +26,11 @@ MonoBehaviour:
       - NoCost
     - QuestionId: NetcodeArchitecture
       Answers:
-      - LockstepSimulation
+      - ClientServer
     - QuestionId: PlayerCount
       Answers:
-      - 4
+      - 8
   Preset: 6
   SelectedSolutions:
-    SelectedHostingModel: 1
-    SelectedNetcodeSolution: 3
+    SelectedHostingModel: 2
+    SelectedNetcodeSolution: 1
