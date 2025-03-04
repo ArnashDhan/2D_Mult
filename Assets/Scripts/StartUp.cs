@@ -12,12 +12,12 @@ public class Startup : MonoBehaviour
         if (System.Environment.GetCommandLineArgs().Any(arg => arg == "-port"))
         {
             Debug.Log("Starting server");
-            SceneManager.LoadScene(Server);
+           // SceneManager.LoadScene(Server);
         }
         else
         {
             Debug.Log("Starting client");
-            SceneManager.LoadScene(Client);
+          //  SceneManager.LoadScene(Client);
         }
     }
 }

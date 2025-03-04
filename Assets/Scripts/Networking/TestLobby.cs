@@ -24,13 +24,18 @@ public class TestLobby : MonoBehaviour
 
         await AuthenticationService.Instance.SignInAnonymouslyAsync();
         InitializeGameData();
-        await QuickJoinOrCreateLobby();
+        
     }
 
     private void Update()
     {
         HandleLobbyHeartbeat();
         HandleLobbyUpdates();
+    }
+    public async void start()
+    {
+        Debug.Log("The lobby is starting");
+        await QuickJoinOrCreateLobby();
     }
 
     private async void HandleLobbyHeartbeat()
@@ -54,7 +59,7 @@ public class TestLobby : MonoBehaviour
         try
         {
             string lobbyName = "Lobby";
-            int maxPlayers = 4;
+            int maxPlayers = 2;
 
             CreateLobbyOptions options = new CreateLobbyOptions
             {
@@ -196,7 +201,7 @@ public class TestLobby : MonoBehaviour
             UpdateLobbyWithTeams(lobby, teams);
 
             // Transition to the game scene
-            UnityEngine.SceneManagement.SceneManager.LoadScene("GameLobby");
+            UnityEngine.SceneManagement.SceneManager.LoadScene("ClashRoom");
         }
     }
     private void StopLobbyUpdates()

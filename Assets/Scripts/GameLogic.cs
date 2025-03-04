@@ -79,9 +79,13 @@ public class GameLogic : MonoBehaviour
                 Debug.Log($"Player {team.Key} belongs to Team {team.Value}");
             }
 
+            // Calculate the total contributions for each team
             Dictionary<int, float> teamTotals = CalculateTeamTotals(GameData.Teams);
+
+            // Determine the winning team based on total contributions
             int winningTeam = DetermineWinningTeam(teamTotals);
 
+            // Distribute prizes to the winning team
             await DistributePrizes(winningTeam, teamTotals);
         }
         finally
@@ -164,7 +168,6 @@ public class GameLogic : MonoBehaviour
                 else
                 {
                     // Deduct contribution amount from losing team players
-                    //await UpdatePlayerTokens(playerId, playerContribution);
                     // Contributions were already deducted
                     Debug.Log($"Player {playerId} loses {playerContribution} tokens as their contribution.");
                 }
