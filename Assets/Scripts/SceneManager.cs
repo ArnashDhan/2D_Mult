@@ -27,6 +27,11 @@ public class SceneManager : MonoBehaviour
             Debug.Log("ChangingSCene to WaitingList");
             UnityEngine.SceneManagement.SceneManager.LoadScene("WaitingList");
         }
+        public void LoadShop()
+        {
+            Debug.Log("ChangingSCene to Shop");
+            UnityEngine.SceneManagement.SceneManager.LoadScene("Shop");
+        }
 }
 
 

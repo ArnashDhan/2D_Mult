@@ -9,10 +9,27 @@ using Unity.Netcode;
 
 public class TestLobby : MonoBehaviour
 {
+    public static TestLobby Instance { get; private set; } // Singleton instance
+
     private Lobby hostLobby;
     private float heartbeatTimer;
     private string playerName = "T";
     private float lobbyUpdateTimer;
+
+    private void Awake()
+    {
+        // Ensure a single instance of TestLobby persists
+        if (Instance == null)
+        {
+            Instance = this;
+            DontDestroyOnLoad(gameObject); // Make this GameObject persistent across scenes
+        }
+        else
+        {
+            Destroy(gameObject); // Destroy duplicate instances
+        }
+    }
+
     private async void Start()
     {
         await UnityServices.InitializeAsync();
@@ -22,9 +39,16 @@ public class TestLobby : MonoBehaviour
             Debug.Log("Signed in: " + AuthenticationService.Instance.PlayerId);
         };
 
-        await AuthenticationService.Instance.SignInAnonymouslyAsync();
+        try
+        {
+            await AuthenticationService.Instance.SignInAnonymouslyAsync();
+        }
+        catch
+        {
+            Debug.Log("Already Signed IN");
+        }
+
         InitializeGameData();
-        
     }
 
     private void Update()
@@ -32,9 +56,10 @@ public class TestLobby : MonoBehaviour
         HandleLobbyHeartbeat();
         HandleLobbyUpdates();
     }
-    public async void start()
+
+    public async void StartLobbyProcess()
     {
-        Debug.Log("The lobby is starting");
+        Debug.Log("The lobby is starting...");
         await QuickJoinOrCreateLobby();
     }
 
@@ -50,7 +75,6 @@ public class TestLobby : MonoBehaviour
 
                 await LobbyService.Instance.SendHeartbeatPingAsync(hostLobby.Id);
             }
-
         }
     }
 
@@ -71,7 +95,6 @@ public class TestLobby : MonoBehaviour
             };
 
             hostLobby = await LobbyService.Instance.CreateLobbyAsync(lobbyName, maxPlayers, options);
-          
             Debug.Log("Created Lobby! " + hostLobby.Name + " " + hostLobby.MaxPlayers);
         }
         catch (LobbyServiceException e)
@@ -79,20 +102,21 @@ public class TestLobby : MonoBehaviour
             Debug.LogError(e);
         }
     }
+    public async void start()
+    {
+        await QuickJoinOrCreateLobby();
+    }
 
     public async Task QuickJoinOrCreateLobby()
     {
         try
         {
-            // Attempt to quick join any available lobby
             Debug.Log("Attempting to quick join a lobby...");
             hostLobby = await LobbyService.Instance.QuickJoinLobbyAsync();
-           
             Debug.Log($"Quick joined lobby: {hostLobby.Name}");
         }
         catch (LobbyServiceException ex)
         {
-            // If no lobby is available, create a new one
             if (ex.Reason == LobbyExceptionReason.NoOpenLobbies)
             {
                 Debug.Log("No available lobby found. Creating a new one...");
@@ -105,52 +129,6 @@ public class TestLobby : MonoBehaviour
         }
     }
 
-
-    private async void ListLobbies()
-    {
-        try
-        {
-            QueryLobbiesOptions queryOptions = new QueryLobbiesOptions
-            {
-                Count = 25,
-                Filters = new List<QueryFilter>
-                {
-                    new QueryFilter(QueryFilter.FieldOptions.AvailableSlots, "0", QueryFilter.OpOptions.GT)
-                },
-                Order = new List<QueryOrder>
-                {
-                    new QueryOrder(false, QueryOrder.FieldOptions.Created)
-                }
-            };
-
-            QueryResponse queryResponse = await LobbyService.Instance.QueryLobbiesAsync(queryOptions);
-
-            Debug.Log("Lobbies Found: " + queryResponse.Results.Count);
-            foreach (Lobby lobby in queryResponse.Results)
-            {
-                Debug.Log(lobby.Name + " " + lobby.MaxPlayers);
-            }
-        }
-        catch (LobbyServiceException e)
-        {
-            Debug.LogError(e);
-        }
-    }
-
-    private async void JoinLobby(string lobbyId)
-    {
-        try
-        {
-            Lobby joinedLobby = await LobbyService.Instance.JoinLobbyByIdAsync(lobbyId);
-
-            Debug.Log($"Joined Lobby: {joinedLobby.Name}");
-
-        }
-        catch (LobbyServiceException e)
-        {
-            Debug.LogError(e);
-        }
-    }
     private async void HandleLobbyUpdates()
     {
         if (hostLobby != null)
@@ -158,13 +136,12 @@ public class TestLobby : MonoBehaviour
             lobbyUpdateTimer -= Time.deltaTime;
             if (lobbyUpdateTimer < 0f)
             {
-                float lobbyUpdateTimerMax = 5; // Check lobby status every 5 seconds
+                float lobbyUpdateTimerMax = 5;
                 lobbyUpdateTimer = lobbyUpdateTimerMax;
 
                 try
                 {
                     hostLobby = await LobbyService.Instance.GetLobbyAsync(hostLobby.Id);
-
                     Debug.Log($"Lobby Updated: {hostLobby.Players.Count}/{hostLobby.MaxPlayers} players.");
                     CheckIfLobbyIsFull();
                 }
@@ -175,6 +152,7 @@ public class TestLobby : MonoBehaviour
             }
         }
     }
+
     private void CheckIfLobbyIsFull()
     {
         if (hostLobby.Players.Count == hostLobby.MaxPlayers)
@@ -183,13 +161,12 @@ public class TestLobby : MonoBehaviour
             StartGame(hostLobby);
         }
     }
+
     private void StartGame(Lobby lobby)
     {
         if (lobby.Players.Count == lobby.MaxPlayers)
         {
             Debug.Log("Lobby is full. Assigning players to teams and starting game...");
-
-            // Assign players to teams
             Dictionary<string, int> teams = AssignPlayersToTeams(lobby);
             GameData.Teams = teams;
             foreach (var team in GameData.Teams)
@@ -197,17 +174,15 @@ public class TestLobby : MonoBehaviour
                 Debug.Log($"Player {team.Key} is in Team {team.Value}");
             }
             StopLobbyUpdates();
-            // Update the lobby data with team assignments
             UpdateLobbyWithTeams(lobby, teams);
-
-            // Transition to the game scene
             UnityEngine.SceneManagement.SceneManager.LoadScene("ClashRoom");
         }
     }
+
     private void StopLobbyUpdates()
     {
-        hostLobby = null; // Clear the reference to stop updates
-        lobbyUpdateTimer = 0; // Reset the timer
+        hostLobby = null;
+        lobbyUpdateTimer = 0;
     }
 
     private Dictionary<string, int> AssignPlayersToTeams(Lobby lobby)
@@ -219,20 +194,19 @@ public class TestLobby : MonoBehaviour
 
         foreach (Player player in lobby.Players)
         {
-            // Alternate assignment to Team 1 and Team 2
             if (team1Count <= team2Count)
             {
-                teams[player.Id] = 1; // Assign to Team 1
+                teams[player.Id] = 1;
                 team1Count++;
             }
             else
             {
-                teams[player.Id] = 2; // Assign to Team 2
+                teams[player.Id] = 2;
                 team2Count++;
             }
-
             Debug.Log($"Assigned Player {player.Id} to Team {teams[player.Id]}");
         }
+
         Debug.Log($"Total players assigned to teams: {teams.Count}");
         return teams;
     }
@@ -241,16 +215,14 @@ public class TestLobby : MonoBehaviour
     {
         try
         {
-            // Convert team assignments to JSON
             string teamsJson = JsonUtility.ToJson(teams);
 
-            // Update the lobby data
             await LobbyService.Instance.UpdateLobbyAsync(lobby.Id, new UpdateLobbyOptions
             {
                 Data = new Dictionary<string, DataObject>
-            {
-                { "Teams", new DataObject(DataObject.VisibilityOptions.Public, teamsJson) }
-            }
+                {
+                    { "Teams", new DataObject(DataObject.VisibilityOptions.Public, teamsJson) }
+                }
             });
 
             Debug.Log("Lobby updated with team assignments.");
@@ -260,25 +232,20 @@ public class TestLobby : MonoBehaviour
             Debug.LogError($"Failed to update lobby with teams: {e.Message}");
         }
     }
+
     public void InitializeGameData()
     {
-        // Initialize Teams
         if (GameData.Teams == null)
         {
             GameData.Teams = new Dictionary<string, int>();
         }
 
-        // Initialize Player Contributions
         if (GameData.PlayerContributions == null)
         {
             GameData.PlayerContributions = new Dictionary<string, float>();
         }
 
-        // Set Prize Pool (example value)
         GameData.PrizePool = 0;
-
         Debug.Log("GameData initialized in LobbyManager.");
     }
-
 }
-

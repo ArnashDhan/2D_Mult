@@ -3,7 +3,7 @@ using UnityEngine;
 using Unity.Services.Economy;
 using Unity.Services.Economy.Model;
 using System.Threading.Tasks;
-using Unity.Services.Authentication;
+using System.Linq;
 
 public class GameLogic : MonoBehaviour
 {
@@ -11,48 +11,70 @@ public class GameLogic : MonoBehaviour
 
     private void Start()
     {
-        // Access team and contribution data
-        Dictionary<string, int> teams = GameData.Teams;
-        Dictionary<string, float> playerContributions = GameData.PlayerContributions;
-        float totalPrizePool = GameData.PrizePool;
-
-        Debug.Log($"Teams: {teams.Count}, Prize Pool: {totalPrizePool} at start");
-        ONClickofthis();
+        Debug.Log("GameLogic script initialized.");
+        InitializeGameData();
+        AssignRandomContributionsForTesting(); // Assign random contributions to players for testing
+        CalculateWinnerAndDistributePrizes(); // Automatically start the test process
     }
 
-    private async void ONClickofthis()
+    private void InitializeGameData()
     {
-        int contributionAmount = Random.Range(1, 10); // Randomize token contribution for testing
+        Debug.Log("Initializing GameData...");
 
-        // Attempt a contribution
-        await UpdatePlayerContribution(AuthenticationService.Instance.PlayerId, contributionAmount);
+        Debug.Log($"Lobby ID: {GameData.LobbyId}");
+        Debug.Log($"Prize Pool: {GameData.PrizePool}");
+        Debug.Log($"Teams Count: {GameData.Teams.Count}");
 
-        // Calculate winners and distribute prizes
-        CalculateWinnerAndDistributePrizes();
+        foreach (var team in GameData.Teams)
+        {
+            Debug.Log($"Player {team.Key} is in Team {team.Value}");
+        }
+
+        if (GameData.PlayerContributions.Count > 0)
+        {
+            foreach (var contribution in GameData.PlayerContributions)
+            {
+                Debug.Log($"Player {contribution.Key} contributed {contribution.Value} to the prize pool.");
+            }
+        }
+        else
+        {
+            Debug.Log("No player contributions recorded yet.");
+        }
     }
 
-    public async Task UpdatePlayerContribution(string playerId, float contributionAmount)
+    private void AssignRandomContributionsForTesting()
     {
-        long playerBalance = await GetPlayerTokenBalance(playerId);
+        Debug.Log("Assigning random contributions for testing...");
 
-        if (playerBalance < contributionAmount)
+        foreach (string playerId in GameData.Teams.Keys)
         {
-            Debug.LogError($"Player {playerId} attempted to contribute {contributionAmount}, but only has {playerBalance} tokens.");
-            return;
+            if (!GameData.PlayerContributions.ContainsKey(playerId))
+            {
+                float randomContribution = Random.Range(1f, 5f); // Random contribution between 1 and 5
+                GameData.PlayerContributions[playerId] = randomContribution;
+                Debug.Log($"Assigned random contribution of {randomContribution} to Player {playerId}.");
+            }
+        }
+    }
+
+    private async Task WaitForPlayerSync()
+    {
+        bool allSynced = false;
+
+        while (!allSynced)
+        {
+            await Task.Delay(1000); // Wait 1 second before checking again.
+
+            Dictionary<string, int> teams = GameData.Teams;
+            Dictionary<string, float> contributions = GameData.PlayerContributions;
+
+            allSynced = teams.Keys.All(playerId => contributions.ContainsKey(playerId));
+
+            Debug.Log("Waiting for all players to sync their data...");
         }
 
-        // Increment player contributions
-        if (!GameData.PlayerContributions.ContainsKey(playerId))
-        {
-            GameData.PlayerContributions[playerId] = 0;
-        }
-        GameData.PlayerContributions[playerId] += contributionAmount;
-        GameData.PrizePool += contributionAmount;
-
-        Debug.Log($"Player {playerId} contributed {contributionAmount}. Total: {GameData.PlayerContributions[playerId]}");
-
-        // Deduct contribution amount from player's token balance
-        await UpdatePlayerTokens(playerId, -contributionAmount);
+        Debug.Log("All players are synced!");
     }
 
     public async void CalculateWinnerAndDistributePrizes()
@@ -66,26 +88,17 @@ public class GameLogic : MonoBehaviour
         isDistributingPrizes = true;
         try
         {
-            // Log current game data for debugging
-            Debug.Log("Current Player Contributions:");
-            foreach (var contribution in GameData.PlayerContributions)
-            {
-                Debug.Log($"Player {contribution.Key}: {contribution.Value} tokens");
-            }
+            await WaitForPlayerSync();
 
-            Debug.Log("Current Teams:");
-            foreach (var team in GameData.Teams)
-            {
-                Debug.Log($"Player {team.Key} belongs to Team {team.Value}");
-            }
-
-            // Calculate the total contributions for each team
             Dictionary<int, float> teamTotals = CalculateTeamTotals(GameData.Teams);
-
-            // Determine the winning team based on total contributions
             int winningTeam = DetermineWinningTeam(teamTotals);
 
-            // Distribute prizes to the winning team
+            if (winningTeam == -1)
+            {
+                Debug.LogError("No valid winning team found.");
+                return;
+            }
+
             await DistributePrizes(winningTeam, teamTotals);
         }
         finally
@@ -113,15 +126,6 @@ public class GameLogic : MonoBehaviour
                 teamTotals[teamId] += contribution;
                 Debug.Log($"Adding contribution of {contribution} from Player {playerId} to Team {teamId}.");
             }
-            else
-            {
-                Debug.LogWarning($"No contribution found for Player {playerId}.");
-            }
-        }
-
-        foreach (var team in teamTotals)
-        {
-            Debug.Log($"Team {team.Key} has a total contribution of {team.Value}.");
         }
 
         return teamTotals;
@@ -148,7 +152,7 @@ public class GameLogic : MonoBehaviour
     private async Task DistributePrizes(int winningTeam, Dictionary<int, float> teamTotals)
     {
         float totalPrizePool = GameData.PrizePool;
-        float winningTeamTotal = teamTotals[winningTeam];
+        float winningTeamTotal = teamTotals.ContainsKey(winningTeam) ? teamTotals[winningTeam] : 0;
 
         foreach (KeyValuePair<string, int> entry in GameData.Teams)
         {
@@ -159,7 +163,6 @@ public class GameLogic : MonoBehaviour
             {
                 if (teamId == winningTeam)
                 {
-                    // Calculate player's share of the prize pool
                     float playerShare = (playerContribution / winningTeamTotal) * totalPrizePool;
                     await UpdatePlayerTokens(playerId, playerShare);
 
@@ -167,51 +170,22 @@ public class GameLogic : MonoBehaviour
                 }
                 else
                 {
-                    // Deduct contribution amount from losing team players
-                    // Contributions were already deducted
-                    Debug.Log($"Player {playerId} loses {playerContribution} tokens as their contribution.");
+                    Debug.Log($"Player {playerId} loses their contribution of {playerContribution}.");
                 }
             }
         }
 
-        // Reset prize pool after distribution
         GameData.PrizePool = 0;
-    }
-
-    private async Task<long> GetPlayerTokenBalance(string playerId)
-    {
-        try
-        {
-            PlayerBalance newBalance = await EconomyService.Instance.PlayerBalances.IncrementBalanceAsync("TOKEN", 0);
-            Debug.Log($"Current balance for {newBalance.CurrencyId} is {newBalance.Balance}.");
-            return newBalance.Balance;
-        }
-        catch (EconomyException e)
-        {
-            Debug.LogError($"Failed to get token balance for Player {playerId}: {e.Message}");
-            return 0;
-        }
     }
 
     private async Task UpdatePlayerTokens(string playerId, float amount)
     {
-        if (amount == 0)
-        {
-            Debug.LogWarning($"No tokens to update for Player {playerId}. Skipping token update.");
-            return;
-        }
-
         try
         {
             if (amount > 0)
             {
                 PlayerBalance newBalance = await EconomyService.Instance.PlayerBalances.IncrementBalanceAsync("TOKEN", (int)amount);
-                Debug.Log($"New balance for {newBalance.CurrencyId} is {newBalance.Balance}. Added {amount} tokens to Player {playerId}.");
-            }
-            else
-            {
-                PlayerBalance newBalance = await EconomyService.Instance.PlayerBalances.DecrementBalanceAsync("TOKEN", (int)Mathf.Abs(amount));
-                Debug.Log($"New balance for {newBalance.CurrencyId} is {newBalance.Balance}. Deducted {Mathf.Abs(amount)} tokens from Player {playerId}.");
+                Debug.Log($"Added {amount} tokens to Player {playerId}. New balance: {newBalance.Balance}.");
             }
         }
         catch (EconomyException e)
